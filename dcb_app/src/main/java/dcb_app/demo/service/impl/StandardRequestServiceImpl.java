@@ -29,7 +29,13 @@ public class StandardRequestServiceImpl implements StandardRequestService {
     private CallAPIMethod callAPIMethod;
 
     @Value("${operator.host}")
-    String operatorHost;
+    private String operatorHost;
+
+    @Value("${token.serviceKey}")
+    private String serviceKey;
+
+    @Value("${token.serviceName}")
+    private String serviceName;
 
     @Override
     public Map<String, Object> processAndSendSPRequest(Map<String, Object> request) throws JsonProcessingException {
@@ -42,7 +48,7 @@ public class StandardRequestServiceImpl implements StandardRequestService {
         Map<String, Object> operatorRequest = processRequest(request);
         try{
             //get access token
-            String tokenGenerationUrl = operatorHost.concat(OperatorUrlEnum.OPERATOR_GENERATE_TOKEN.getUri().replace("{service_key}","IIII").replace("{service_name}","III"));
+            String tokenGenerationUrl = operatorHost.concat(OperatorUrlEnum.OPERATOR_GENERATE_TOKEN.getUri().replace("{service_key}",serviceKey).replace("{service_name}",serviceName));
             Map<String, String> tokenGenerationRes = callAPIMethod.callAPI(tokenGenerationUrl, null, HttpMethod.GET, new ParameterizedTypeReference<Map<String, String>>() {}, null );
             String accessToken = tokenGenerationRes.get("access_token");
             // send to operator
