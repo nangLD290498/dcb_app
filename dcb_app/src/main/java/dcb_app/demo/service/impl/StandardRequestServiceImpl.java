@@ -38,10 +38,9 @@ public class StandardRequestServiceImpl implements StandardRequestService {
     private String serviceName;
 
     @Override
-    public Map<String, Object> processAndSendSPRequest(Map<String, Object> request) throws JsonProcessingException {
+    public Map<String, Object> processAndSendSPRequest(Map<String, Object> request) throws Exception {
         log.info("Start processAndSendSPRequest");
-        log.info("SP request: {}", request.toString());
-        Map<String, Object> response = new HashMap<>();
+        Map<String, Object> response;
         Map<String, Object> operatorResponse = new HashMap<>();
         ObjectMapper mapper = new ObjectMapper();
         // prepare operator request
@@ -49,19 +48,25 @@ public class StandardRequestServiceImpl implements StandardRequestService {
         try{
             //get access token
             String tokenGenerationUrl = operatorHost.concat(OperatorUrlEnum.OPERATOR_GENERATE_TOKEN.getUri().replace("{service_key}",serviceKey).replace("{service_name}",serviceName));
-            Map<String, String> tokenGenerationRes = callAPIMethod.callAPI(tokenGenerationUrl, null, HttpMethod.GET, new ParameterizedTypeReference<Map<String, String>>() {}, null );
-            String accessToken = tokenGenerationRes.get("access_token");
+            log.info("sending request to: {}", tokenGenerationUrl);
+            Map<String, Object> tokenGenerationRes = callAPIMethod.callAPI(tokenGenerationUrl, null, HttpMethod.GET, new ParameterizedTypeReference<Map<String, Object>>() {}, null );
+            log.info("token response received: {}", tokenGenerationRes);
+            String accessToken = (String) tokenGenerationRes.get("access_token");
             // send to operator
             String url = operatorHost.concat(OperatorUrlEnum.OPERATOR_REQUEST.getUri());
-            operatorRequest = callAPIMethod.callAPI(tokenGenerationUrl, operatorRequest, HttpMethod.GET, new ParameterizedTypeReference<Map<String, Object>>() {}, accessToken );
-        } catch (Exception e) {}
-        finally {
-            log.info("SoperatorResponse: {}", operatorResponse.toString());
+            log.info("sending request to: {}", url);
+            operatorResponse = callAPIMethod.callAPI(url, operatorRequest, HttpMethod.POST, new ParameterizedTypeReference<Map<String, Object>>() {}, accessToken);
             log.info("Sent request to operator successfully!");
+        } catch (Exception e) {
+        } finally {
+            response = processResponse(operatorResponse);
         }
         // process BCD response
-        response = processResponse(operatorResponse);
+
+        log.info("DCB request: {}", request.toString());
         log.info("DCB response: {}", response.toString());
+        log.info("operatorRequest: {}", operatorRequest.toString());
+        log.info("operatorResponse: {}", operatorResponse.toString());
         //save to DB
         StandardRequest standardRequest = new StandardRequest();
         standardRequest.setJsonRequest(mapper.writeValueAsString(request));
@@ -73,8 +78,9 @@ public class StandardRequestServiceImpl implements StandardRequestService {
     }
 
     private Map<String, Object> processRequest(Map<String, Object> request){
-        Map<String, String> customerInfo = (Map<String, String>) request.get("customerInfo");
-        Map<String, String> transactionInfo = (Map<String, String>) request.get("transactionInfo");
+        Map<String, Object> chargingRequest = (Map<String, Object>) request.get("chargingRequest");
+        Map<String, String> customerInfo = (Map<String, String>) chargingRequest.get("customerInfo");
+        Map<String, String> transactionInfo = (Map<String, String>) chargingRequest.get("transactionInfo");
         Map<String, Object> operatorRequest = new HashMap<>();
         Map<String, String> operatorTransactionInfo = new HashMap<>();
 
@@ -87,7 +93,6 @@ public class StandardRequestServiceImpl implements StandardRequestService {
         operatorTransactionInfo.put("currency", transactionInfo.get("currency"));
 
         operatorRequest.put("transactionInfo", operatorTransactionInfo);
-        log.info("operatorRequest: {}", operatorRequest.toString());
         return operatorRequest;
     }
 
@@ -96,15 +101,19 @@ public class StandardRequestServiceImpl implements StandardRequestService {
         Map<String, Object> dcbResponse = new HashMap<>();
         Map<String, String> customerInfo = new HashMap<>();
         Map<String, String> transactionInfo = new HashMap<>();
+        try {
+            customerInfo.put("mobileNo", operatorTransactionInfo.get("msisdn"));
 
-        customerInfo.put("mobileNo", operatorTransactionInfo.get("msisdn"));
+            transactionInfo.put("transactionId", operatorTransactionInfo.get("refId"));
+            transactionInfo.put("responseStatus", operatorTransactionInfo.get("responseCode").equals("00") ? "Success" : "Failed");
+            transactionInfo.put("responseDesc", operatorTransactionInfo.get("responseDesc"));
 
-        transactionInfo.put("transactionId", operatorTransactionInfo.get("refId"));
-        transactionInfo.put("responseStatus", operatorTransactionInfo.get("responseCode").equals("00") ? "Success" : "Failed");
-        transactionInfo.put("responseDesc", operatorTransactionInfo.get("responseDesc"));
-
-        dcbResponse.put("customerInfo", customerInfo);
-        dcbResponse.put("transactionInfo", transactionInfo);
+            dcbResponse.put("customerInfo", customerInfo);
+            dcbResponse.put("transactionInfo", transactionInfo);
+        }catch (Exception e){
+            dcbResponse.clear();
+            dcbResponse.put("responseStatus", "Failed");
+        }
         return dcbResponse;
     }
 }

@@ -18,7 +18,7 @@ public class RequestController {
     private StandardRequestService standardRequestService;
 
     @PostMapping("/transaction/charge")
-    public Map<String, Object> processAndSendSPRequest(@RequestBody Map<String, Object> request) throws JsonProcessingException {
+    public Map<String, Object> processAndSendSPRequest(@RequestBody Map<String, Object> request) throws Exception {
         return standardRequestService.processAndSendSPRequest(request);
     }
 

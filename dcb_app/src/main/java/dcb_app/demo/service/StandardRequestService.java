@@ -7,5 +7,5 @@ import java.util.Map;
 
 public interface StandardRequestService {
 
-    Map<String, Object> processAndSendSPRequest(Map<String, Object> request) throws JsonProcessingException;
+    Map<String, Object> processAndSendSPRequest(Map<String, Object> request) throws Exception;
 }
