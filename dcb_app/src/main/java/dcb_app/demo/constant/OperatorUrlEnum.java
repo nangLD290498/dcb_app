@@ -1,7 +1,9 @@
 package dcb_app.demo.constant;
 
 public enum OperatorUrlEnum {
-    OPERATOR_ORDER("OPERATOR_REQUEST","/carrier/payment");
+    OPERATOR_GENERATE_TOKEN("OPERATOR_GENERATE_TOKEN","/generateToken?service_key={service_key}&service_name={service_name}"),
+
+    OPERATOR_REQUEST("OPERATOR_REQUEST","/carrier/payment");
 
     private final String name;
     private final String uri;

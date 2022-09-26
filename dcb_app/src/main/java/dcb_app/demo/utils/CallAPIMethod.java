@@ -1,27 +1,40 @@
 package dcb_app.demo.utils;
 
-import dcb_app.demo.model.ResponseWrapper;
-import org.springframework.http.HttpEntity;
-import org.springframework.http.HttpMethod;
-import org.springframework.http.ResponseEntity;
+import com.fasterxml.jackson.core.JsonProcessingException;
+import com.fasterxml.jackson.databind.ObjectMapper;
+import dcb_app.demo.constant.OperatorUrlEnum;
+import lombok.extern.slf4j.Slf4j;
+import org.springframework.beans.factory.annotation.Autowired;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.*;
 import org.springframework.stereotype.Component;
+import org.springframework.util.StringUtils;
+import org.springframework.web.client.HttpClientErrorException;
 import org.springframework.web.client.RestTemplate;
 
+import java.util.HashMap;
 import java.util.Map;
 
 @Component
+@Slf4j
 public class CallAPIMethod {
 
-    RestTemplate restTemplate;
+    private RestTemplate restTemplate;
 
-    public ResponseWrapper doPost(String url, Map requestBody){
+    public <T> T callAPI(String url, Object body, HttpMethod httpMethod, ParameterizedTypeReference typeReference, String accessToken){
         restTemplate = new RestTemplate();
-        HttpEntity<Map<String, Object>> request = new HttpEntity<>(requestBody);
-        ResponseEntity<ResponseWrapper> response = restTemplate
-                .exchange(url, HttpMethod.POST, request, ResponseWrapper.class);
-
-        ResponseWrapper responseObject = response.getBody();
-
-        return responseObject;
+        HttpHeaders headers = new HttpHeaders();
+        headers.setContentType(MediaType.APPLICATION_JSON);
+        if(!StringUtils.isEmpty(accessToken)){
+            headers.set("Authotization", accessToken);
+        }
+        HttpEntity<Object> entity = new HttpEntity<>(body, headers);
+        try {
+            ResponseEntity<T> response = restTemplate.exchange(url, httpMethod, entity, typeReference);
+        }catch (HttpClientErrorException e){}
+        return null;
     }
+
+
+
 }

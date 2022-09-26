@@ -1,14 +1,18 @@
 package dcb_app.demo.service.impl;
 
+import com.fasterxml.jackson.core.JsonProcessingException;
 import com.fasterxml.jackson.databind.ObjectMapper;
+import dcb_app.demo.constant.OperatorUrlEnum;
 import dcb_app.demo.constant.SPUrlEnum;
-import dcb_app.demo.model.ResponseWrapper;
+import dcb_app.demo.model.StandardRequest;
 import dcb_app.demo.repository.StandardRequestRepository;
 import dcb_app.demo.service.StandardRequestService;
 import dcb_app.demo.utils.CallAPIMethod;
 import lombok.extern.slf4j.Slf4j;
 import org.springframework.beans.factory.annotation.Autowired;
 import org.springframework.beans.factory.annotation.Value;
+import org.springframework.core.ParameterizedTypeReference;
+import org.springframework.http.HttpMethod;
 import org.springframework.stereotype.Service;
 
 import java.util.HashMap;
@@ -28,23 +32,73 @@ public class StandardRequestServiceImpl implements StandardRequestService {
     String operatorHost;
 
     @Override
-    public Map<String, Object> processAndSendSPRequest(Map<String, Object> request) {
+    public Map<String, Object> processAndSendSPRequest(Map<String, Object> request) throws JsonProcessingException {
         log.info("Start processAndSendSPRequest");
         log.info("SP request: {}", request.toString());
         Map<String, Object> response = new HashMap<>();
-        Map<String, Object> operatorRequest = new HashMap<>();
-        ResponseWrapper<Map<String, Object>> operatorResponse = new ResponseWrapper<>();
-        //todo: prepare operator request
-        ObjectMapper objectMapper = new ObjectMapper();
-
+        Map<String, Object> operatorResponse = new HashMap<>();
+        ObjectMapper mapper = new ObjectMapper();
+        // prepare operator request
+        Map<String, Object> operatorRequest = processRequest(request);
         try{
-            operatorResponse = callAPIMethod.doPost(operatorHost.concat(SPUrlEnum.SP_REQUEST.getUri()), operatorRequest);
+            //get access token
+            String tokenGenerationUrl = operatorHost.concat(OperatorUrlEnum.OPERATOR_GENERATE_TOKEN.getUri().replace("{service_key}","IIII").replace("{service_name}","III"));
+            Map<String, String> tokenGenerationRes = callAPIMethod.callAPI(tokenGenerationUrl, null, HttpMethod.GET, new ParameterizedTypeReference<Map<String, String>>() {}, null );
+            String accessToken = tokenGenerationRes.get("access_token");
+            // send to operator
+            String url = operatorHost.concat(OperatorUrlEnum.OPERATOR_REQUEST.getUri());
+            operatorRequest = callAPIMethod.callAPI(tokenGenerationUrl, operatorRequest, HttpMethod.GET, new ParameterizedTypeReference<Map<String, Object>>() {}, accessToken );
         } catch (Exception e) {}
         finally {
             log.info("SoperatorResponse: {}", operatorResponse.toString());
             log.info("Sent request to operator successfully!");
         }
-        //todo: process BCD response
+        // process BCD response
+        response = processResponse(operatorResponse);
+        log.info("DCB response: {}", response.toString());
+        //save to DB
+        StandardRequest standardRequest = new StandardRequest();
+        standardRequest.setJsonRequest(mapper.writeValueAsString(request));
+        standardRequest.setJsonResponse(mapper.writeValueAsString(response));
+        standardRequest.setOperatorRequest(mapper.writeValueAsString(operatorRequest));
+        standardRequest.setOperatorResponse(mapper.writeValueAsString(operatorResponse));
+        requestRepository.save(standardRequest);
         return response;
+    }
+
+    private Map<String, Object> processRequest(Map<String, Object> request){
+        Map<String, String> customerInfo = (Map<String, String>) request.get("customerInfo");
+        Map<String, String> transactionInfo = (Map<String, String>) request.get("transactionInfo");
+        Map<String, Object> operatorRequest = new HashMap<>();
+        Map<String, String> operatorTransactionInfo = new HashMap<>();
+
+        operatorTransactionInfo.put("msisdn", customerInfo.get("mobileNo"));
+        operatorTransactionInfo.put("refId", transactionInfo.get("transactionId"));
+        operatorTransactionInfo.put("item", transactionInfo.get("item"));
+        operatorTransactionInfo.put("itemDescription", transactionInfo.get("itemDescription"));
+        operatorTransactionInfo.put("balanceType", transactionInfo.get("balanceType"));
+        operatorTransactionInfo.put("chargeAmount", transactionInfo.get("amount"));
+        operatorTransactionInfo.put("currency", transactionInfo.get("currency"));
+
+        operatorRequest.put("transactionInfo", operatorTransactionInfo);
+        log.info("operatorRequest: {}", operatorRequest.toString());
+        return operatorRequest;
+    }
+
+    private Map<String, Object> processResponse(Map<String, Object> operatorResponse){
+        Map<String, String> operatorTransactionInfo = (Map<String, String>) operatorResponse.get("transactionInfo");
+        Map<String, Object> dcbResponse = new HashMap<>();
+        Map<String, String> customerInfo = new HashMap<>();
+        Map<String, String> transactionInfo = new HashMap<>();
+
+        customerInfo.put("mobileNo", operatorTransactionInfo.get("msisdn"));
+
+        transactionInfo.put("transactionId", operatorTransactionInfo.get("refId"));
+        transactionInfo.put("responseStatus", operatorTransactionInfo.get("responseCode").equals("00") ? "Success" : "Failed");
+        transactionInfo.put("responseDesc", operatorTransactionInfo.get("responseDesc"));
+
+        dcbResponse.put("customerInfo", customerInfo);
+        dcbResponse.put("transactionInfo", transactionInfo);
+        return dcbResponse;
     }
 }
