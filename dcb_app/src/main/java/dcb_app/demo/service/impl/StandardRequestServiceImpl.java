@@ -62,7 +62,6 @@ public class StandardRequestServiceImpl implements StandardRequestService {
             response = processResponse(operatorResponse);
         }
         // process BCD response
-
         log.info("DCB request: {}", request.toString());
         log.info("DCB response: {}", response.toString());
         log.info("operatorRequest: {}", operatorRequest.toString());
